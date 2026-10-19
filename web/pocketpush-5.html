@@ -1,0 +1,1232 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src https://api.github.com; base-uri 'none'; form-action 'none';">
+<title>PocketPush — push a folder to GitHub</title>
+<style>
+  :root{
+    --bg:#0f1115;
+    --panel:#161a20;
+    --panel-2:#1d222a;
+    --border:#262b34;
+    --text:#e8e6e1;
+    --text-dim:#9aa1ad;
+    --accent:#d4a24c;
+    --accent-ink:#1a1408;
+    --ok:#4fa37a;
+    --err:#d1555b;
+    --mono: ui-monospace, "SF Mono", "Cascadia Mono", "Consolas", monospace;
+    --sans: system-ui, -apple-system, "Segoe UI", "Vazirmatn", Tahoma, sans-serif;
+    --radius: 10px;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--text);font-family:var(--sans);}
+  body{min-height:100vh; padding:28px 16px 80px;}
+  .wrap{max-width:640px;margin:0 auto;}
+  header.top{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:28px;flex-wrap:wrap;}
+  h1{font-size:1.35rem;margin:0;font-weight:700;letter-spacing:-.01em;}
+  h1 .glyph{color:var(--accent);}
+  .sub{color:var(--text-dim);font-size:.88rem;margin-top:4px;}
+  .langswitch{display:flex;border:1px solid var(--border);border-radius:8px;overflow:hidden;flex-shrink:0;}
+  .langswitch button{background:var(--panel);color:var(--text-dim);border:none;padding:6px 12px;font-size:.82rem;cursor:pointer;font-family:inherit;}
+  .langswitch button.active{background:var(--accent);color:var(--accent-ink);font-weight:600;}
+
+  .step{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:18px 18px 20px;margin-bottom:14px;}
+  .step h2{font-size:.95rem;margin:0 0 14px;display:flex;align-items:center;gap:10px;color:var(--text);}
+  .step h2 .num{width:22px;height:22px;border-radius:50%;background:var(--panel-2);border:1px solid var(--border);display:inline-flex;align-items:center;justify-content:center;font-size:.75rem;color:var(--accent);flex-shrink:0;font-family:var(--mono);}
+  .field{margin-bottom:12px;}
+  .field:last-child{margin-bottom:0;}
+  label{display:block;font-size:.8rem;color:var(--text-dim);margin-bottom:5px;}
+  .row2{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+  input[type=text],input[type=password]{
+    width:100%;background:var(--panel-2);border:1px solid var(--border);border-radius:7px;
+    color:var(--text);padding:9px 10px;font-family:var(--mono);font-size:.86rem;
+  }
+  input:focus{outline:2px solid var(--accent);outline-offset:1px;}
+  .tokenrow{display:flex;gap:6px;}
+  .tokenrow input{flex:1;}
+  .ghost-btn{background:transparent;border:1px solid var(--border);color:var(--text-dim);border-radius:7px;padding:0 12px;font-size:.78rem;cursor:pointer;font-family:inherit;}
+  .hint{font-size:.75rem;color:var(--text-dim);margin-top:5px;line-height:1.5;}
+  .hint a{color:var(--accent);}
+  details.tokenhelp{margin-top:10px;background:var(--panel-2);border:1px solid var(--border);border-radius:8px;padding:10px 12px;}
+  details.tokenhelp summary{cursor:pointer;font-size:.82rem;color:var(--accent);font-weight:600;}
+  details.tokenhelp summary::marker{color:var(--accent);}
+  details.tokenhelp[open] summary{margin-bottom:8px;}
+  details.tokenhelp ol{margin:8px 0;padding-inline-start:20px;font-size:.8rem;color:var(--text);line-height:1.7;}
+  details.tokenhelp ol li{margin-bottom:2px;}
+  .checkline{display:flex;align-items:flex-start;gap:8px;font-size:.82rem;color:var(--text-dim);margin-top:10px;}
+  .checkline input{margin-top:3px;}
+
+  .filesummary{white-space:pre-wrap;word-break:break-all;margin-top:10px;font-size:.82rem;color:var(--text-dim);font-family:var(--mono);line-height:1.6;}
+  .filesummary .w{color:var(--accent);}
+  .pickbtns{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;}
+  .pickbtns button{flex:1;min-width:100px;}
+
+  button.primary{
+    width:100%;background:var(--accent);color:var(--accent-ink);border:none;border-radius:8px;
+    padding:12px 14px;font-size:.92rem;font-weight:700;cursor:pointer;font-family:inherit;
+  }
+  button.primary:disabled{opacity:.45;cursor:not-allowed;}
+  button.secondary{
+    background:var(--panel-2);color:var(--text);border:1px solid var(--border);border-radius:8px;
+    padding:10px 14px;font-size:.85rem;cursor:pointer;font-family:inherit;
+  }
+  button.secondary:disabled{opacity:.45;cursor:not-allowed;}
+
+  .log{
+    margin-top:14px;background:#0b0d11;border:1px solid var(--border);border-radius:8px;
+    padding:10px 12px;font-family:var(--mono);font-size:.76rem;line-height:1.65;color:#b9c0cc;
+    max-height:260px;overflow-y:auto;white-space:pre-wrap;word-break:break-word;
+  }
+  .log:empty{display:none;}
+  .log div{unicode-bidi:plaintext;}
+  .log .l-ok{color:var(--ok);}
+  .log .l-err{color:var(--err);}
+  .log .l-warn{color:var(--accent);}
+  .progressbar{height:6px;border-radius:4px;background:var(--panel-2);overflow:hidden;margin-top:12px;}
+  .progressbar > div{height:100%;background:var(--accent);width:0%;transition:width .2s ease;}
+  .result{margin-top:12px;font-size:.85rem;}
+  .result a{color:var(--accent);}
+
+  footer{max-width:640px;margin:24px auto 0;color:var(--text-dim);font-size:.74rem;text-align:center;line-height:1.7;}
+
+  [dir=rtl] body{font-family:var(--sans);}
+  [dir=rtl] input[type=text],[dir=rtl] input[type=password]{direction:ltr;text-align:left;}
+  [dir=rtl] .row2{direction:rtl;}
+
+  @media (max-width:480px){ .row2{grid-template-columns:1fr;} }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="top">
+    <div>
+      <h1><span class="glyph">📁➜🐙</span> <span data-i="title">PocketPush</span></h1>
+      <div class="sub" data-i="tagline">Push a whole project folder to a GitHub repo, straight from your phone.</div>
+    </div>
+    <div class="langswitch">
+      <button id="lang-en" class="active">EN</button>
+      <button id="lang-fa">فا</button>
+    </div>
+  </header>
+
+  <!-- STEP 1: credentials -->
+  <div class="step">
+    <h2><span class="num">1</span> <span data-i="s1title">GitHub access</span></h2>
+    <div class="field">
+      <label data-i="tokenLabel">Personal access token</label>
+      <div class="tokenrow">
+        <input type="password" id="token" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="github_pat_… / ghp_…">
+        <button class="ghost-btn" id="toggleToken" type="button">Show</button>
+      </div>
+      <div class="hint" data-i="tokenHint"></div>
+      <details class="tokenhelp" id="tokenHelp">
+        <summary data-i="tokenHelpSummary">Don't have a token? Here's how to get one (2 minutes)</summary>
+        <ol id="tokenStepsList"></ol>
+        <div class="hint" data-i="tokenHelpWorkflow"></div>
+        <div class="hint" data-i="tokenHelpOrg"></div>
+        <div class="hint" data-i="tokenHelpClassic"></div>
+        <a id="tokenHelpLink" class="ghost-btn" style="display:inline-block;margin-top:8px;padding:6px 12px;text-decoration:none;" href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener" data-i="tokenHelpLink">Open GitHub token settings</a>
+      </details>
+      <label class="checkline">
+        <input type="checkbox" id="rememberToken">
+        <span data-i="rememberLabel"></span>
+      </label>
+    </div>
+    <div class="field row2">
+      <div>
+        <label data-i="ownerLabel">Owner</label>
+        <input type="text" id="owner" autocapitalize="off" spellcheck="false" placeholder="your-username">
+      </div>
+      <div>
+        <label data-i="repoLabel">Repository</label>
+        <input type="text" id="repo" autocapitalize="off" spellcheck="false" placeholder="your-repo">
+      </div>
+    </div>
+    <div class="field row2">
+      <div>
+        <label data-i="branchLabel">Branch</label>
+        <input type="text" id="branch" autocapitalize="off" spellcheck="false" placeholder="main">
+      </div>
+      <div>
+        <label data-i="targetLabel">Target folder (optional)</label>
+        <input type="text" id="targetFolder" autocapitalize="off" spellcheck="false" placeholder="e.g. apps/mobile">
+      </div>
+    </div>
+    <div class="field">
+      <label data-i="msgLabel">Commit message</label>
+      <input type="text" id="commitMsg" placeholder="Upload project folder">
+    </div>
+    <div class="field">
+      <button class="secondary" id="checkBtn" type="button" style="width:100%" data-i="checkBtn">Check access</button>
+      <div class="log" id="checkLog"></div>
+    </div>
+  </div>
+
+  <!-- STEP 2: files -->
+  <div class="step">
+    <h2><span class="num">2</span> <span data-i="s2title">Choose what to push</span></h2>
+    <div class="pickbtns">
+      <button class="secondary" id="pickFolder" type="button" data-i="pickFolder">Choose folder</button>
+      <button class="secondary" id="pickZip" type="button" data-i="pickZip">Choose .zip file</button>
+      <button class="secondary" id="pickFiles" type="button" data-i="pickFiles">Add files</button>
+    </div>
+    <input type="file" id="folderInput" webkitdirectory directory multiple hidden>
+    <input type="file" id="zipInput" accept=".zip,application/zip,application/x-zip-compressed,application/octet-stream" hidden>
+    <input type="file" id="filesInput" multiple hidden>
+    <div class="filesummary" id="fileSummary"></div>
+    <label class="checkline">
+      <input type="checkbox" id="includeHeavy">
+      <span data-i="heavyLabel"></span>
+    </label>
+    <label class="checkline">
+      <input type="checkbox" id="flattenRoot" checked>
+      <span data-i="flattenLabel"></span>
+    </label>
+    <div class="hint" data-i="excludeHint"></div>
+  </div>
+
+  <!-- STEP 3: push -->
+  <div class="step">
+    <h2><span class="num">3</span> <span data-i="s3title">Push</span></h2>
+    <button class="primary" id="pushBtn" data-i="pushBtn">Push to GitHub</button>
+    <button class="secondary" id="cancelBtn" style="width:100%;margin-top:8px;display:none;" data-i="cancelBtn">Cancel</button>
+    <div class="progressbar"><div id="progressFill"></div></div>
+    <div class="log" id="log"></div>
+    <div class="result" id="result"></div>
+    <button class="secondary" id="copyLog" type="button" style="margin-top:10px;width:100%" data-i="copyLog">Copy log</button>
+  </div>
+
+  <footer><span data-i="footer"></span> · v3.0</footer>
+</div>
+
+<script>
+(function(){
+"use strict";
+
+const VERSION = "3.0";
+const API = "https://api.github.com";
+const API_VERSION = "2022-11-28"; // pinned so GitHub's default-version drift can't silently break this tool
+
+/* =====================================================================
+   i18n
+   ===================================================================== */
+const STR = {
+en: {
+  title:"PocketPush", tagline:"Push a whole project folder to a GitHub repo, straight from your phone.",
+  s1title:"GitHub access", tokenLabel:"Personal access token",
+  tokenHint:"The token is used only for direct requests to api.github.com and is never sent anywhere else.",
+  tokenHelpSummary:"Don't have a token? Here's how to get one (2 minutes)",
+  tokenSteps:[
+    "Go to github.com and sign in.",
+    "Click your profile picture, top right, then Settings.",
+    "Scroll to the very bottom of the left sidebar and click Developer settings.",
+    "Click Personal access tokens, then Fine-grained tokens, then Generate new token.",
+    "Give it any name, and set an expiration date (e.g. 90 days).",
+    "Under Repository access, choose Only select repositories and pick the repo you're pushing to.",
+    "Under Permissions → Repository permissions, find Contents and set it to Read and write.",
+    "Click Generate token at the bottom, then copy the token immediately — GitHub only shows it once.",
+    "Paste it into the field above, then press Check access to confirm everything works.",
+  ],
+  tokenHelpWorkflow:"Pushing files under .github/workflows? The token also needs Workflows → Read and write (fine-grained) or the workflow scope (classic). Without it GitHub answers 403/404.",
+  tokenHelpOrg:"Pushing to a repository owned by an organization? The org owner may need to approve the token before it works — GitHub will show a pending-approval notice if so.",
+  tokenHelpClassic:"Prefer a classic token instead? Developer settings → Personal access tokens → Tokens (classic) → Generate new token (classic), and check the repo scope.",
+  tokenHelpLink:"Open GitHub token settings",
+  rememberLabel:"Keep this token in this browser tab until I close it (never saved permanently)",
+  ownerLabel:"Owner", repoLabel:"Repository", branchLabel:"Branch (empty = repo default)", targetLabel:"Target folder (optional)",
+  msgLabel:"Commit message", checkBtn:"Check access first (changes nothing)",
+  s2title:"Choose what to push", pickFolder:"Choose folder", pickZip:"Choose .zip", pickFiles:"Add files",
+  heavyLabel:"Include node_modules / venv / build folders (off by default)",
+  flattenLabel:"If everything sits inside one wrapper folder, remove that folder",
+  excludeHint:"Always skipped: .git, node_modules, venv, .venv, __pycache__, dist, build, .next, __MACOSX, .DS_Store, Thumbs.db, and .env files (except .env.example) so secrets don't get uploaded by accident.",
+  s3title:"Push", pushBtn:"Push to GitHub", cancelBtn:"Cancel", copyLog:"Copy log", copied:"Copied ✓",
+  footer:"Runs entirely in your browser. No server in between — every request goes straight to api.github.com. Keep this tab open while pushing.",
+  show:"Show", hide:"Hide",
+  noFiles:"No files selected yet.",
+  filesFound:(n,bytes,skipped)=>`${n} file(s) selected · ${humanSize(bytes)}` + (skipped ? ` · ${skipped} skipped` : ""),
+  destRoot:(d)=> d ? `Will land inside "${d}/" in the repo:` : "Will land at the repo root:",
+  warnNoStructure:"This browser did not give folder structure, so files are flat. Use the .zip option to keep your folders.",
+  warnZipSkipped:(n)=>`${n} zip entr${n===1?"y":"ies"} skipped (encrypted, zip64 or unsupported compression).`,
+
+  errNoToken:"Enter a token first.", errBadToken:"The token has spaces or non-English characters in it. Copy it again from GitHub.",
+  errNoOwnerRepo:"Enter both owner and repository.", errBadBranch:"That branch name is not valid.",
+  errNoFiles:"Choose a folder or a zip file first.",
+  errZipUnsupported:"This browser can't unzip files (Compression Streams API missing). Use the folder picker instead, or use a newer browser.",
+  errZipBad:"This is not a valid zip file.", errZip64:"This zip is too large/new-style (zip64). Re-zip it normally or use the folder picker.",
+  errTooLarge:(name,size)=>`Skipped "${name}": larger than ${size}, GitHub's API can't take it this way.`,
+  errEmptyFile:(name)=>`Skipped empty file "${name}" (GitHub refused to store it).`,
+  errArchived:"This repository is archived (read-only). Unarchive it on GitHub first.",
+  errNoPush:"Your account can see this repository but has no write permission on it.",
+
+  logStart:"Starting…", logAuthCheck:"Checking token, repository and write access…",
+  logAccessOk:"Access looks good.",
+  logRepoEmpty:"Repository has no commits yet — creating the first file to initialize it…",
+  logRepoInit:"Repository initialized.",
+  logBranchNew:(b,d)=>`Branch "${b}" doesn't exist yet — it will be created from "${d}".`,
+  logPreparing:(n)=>`Preparing ${n} file(s)…`,
+  logProgress:(done,total)=>`Processed ${done}/${total} files…`,
+  logPrepared:(t,b)=>`${t} text file(s) packed inline, ${b} binary file(s) uploaded.`,
+  logWorkflow:(n)=>`${n} file(s) are under .github/workflows — your token needs the Workflows permission (or the workflow scope) for these.`,
+  logTree:"Building the tree…", logCommit:"Creating the commit…", logRef:"Updating the branch…",
+  logNoChanges:"Nothing to commit — the repository already contains identical files.",
+  logDone:"Done.", logCancelled:"Cancelled.",
+  logPushed:(n)=>`Pushed ${n} file(s).`,
+  logSkipped:(n)=>`${n} file(s) were skipped (see warnings above).`,
+  logRetry:(s)=>`Rate limited — waiting ${s}s, then retrying…`,
+  resultOk:"Pushed successfully.", resultLink:"View on GitHub →",
+
+  chkUser:(login,kind)=>`✓ Token works — signed in as ${login} (${kind})`,
+  kindFine:"fine-grained token", kindUnknown:"token", kindClassic:(s)=>`classic token, scopes: ${s || "none"}`,
+  chkUserWarn:(s,m)=>`• Could not read /user (${s}): ${m}`,
+  chkRepo:(full,priv,def)=>`✓ Repository found: ${full} (${priv?"private":"public"}), default branch: ${def}`,
+  chkBranch:(b,state)=> state==="exists" ? `✓ Branch "${b}" exists`
+        : state==="missing" ? `• Branch "${b}" doesn't exist yet — it will be created on push`
+        : `• Repository is empty — the first push will initialize it`,
+  chkWriteOk:"✓ Write access to repository contents works",
+  chkWriteSkip:"• Write test skipped (repository is empty)",
+  chkRate:(rem,lim,mins)=>`• API quota: ${rem}/${lim} requests left (resets in ~${mins} min)`,
+  chkAllOk:"All checks passed. You can push.", chkSomeFail:"Fix the ✗ items above, then check again.",
+  chkFail:(what,s,m)=>`✗ ${what} (${s}): ${m}`,
+  whatUser:"Token check failed", whatRepo:"Can't open the repository", whatBranch:"Can't read the branch", whatWrite:"Writing is NOT allowed",
+
+  stageLabel:"Failed at: ",
+  errGeneric:"Something went wrong: ", errAuth:"That token was rejected (401). Check that it's valid, not expired, and copied completely.",
+  errForbidden:"Access denied (403).", errNotFound:"Not found (404).",
+  errNetwork:"Could not reach api.github.com (network error).",
+  hintPerm:"Fix: edit the token on GitHub — Repository access must include this exact repo, and Repository permissions → Contents must be Read and write. If the repo belongs to an organization, the owner may need to approve the token.",
+  hintRate:"Fix: GitHub's rate limit kicked in. Wait a few minutes (up to an hour if you pushed a lot), then push again.",
+  hintProtected:"Fix: the branch is protected, so direct pushes are blocked. Push to a new branch name, then open a pull request.",
+  hintSso:"Fix: the organization requires SSO authorization. On GitHub open the token and click Configure SSO → Authorize for the organization.",
+  hintIp:"Fix: the organization has an IP allow list and your current network isn't on it. Use an allowed network or ask the org owner.",
+  hintWorkflow:"Fix: the push touches .github/workflows files. Give the token Workflows → Read and write (fine-grained) or the workflow scope (classic), or untick/remove those files.",
+  hintBlocked:"The reply did not come from GitHub's API (it wasn't JSON). A VPN, proxy, firewall or network filter is probably blocking api.github.com. Try another network, or turn the VPN off/on.",
+  hintRace:"Fix: the branch changed while pushing. Just push again.",
+  hintNotFound:"Check the owner and repository spelling. Fine-grained tokens only see repositories you selected, and private repositories look like 404 when the token can't access them.",
+},
+fa: {
+  title:"پاکت‌پوش", tagline:"کل یه پوشه‌ی پروژه رو مستقیم از گوشیت به یه ریپوی گیت‌هاب push کن.",
+  s1title:"دسترسی گیت‌هاب", tokenLabel:"توکن دسترسی شخصی",
+  tokenHint:"این توکن فقط برای درخواست مستقیم به api.github.com استفاده می‌شه و جای دیگه‌ای ارسال نمی‌شه.",
+  tokenHelpSummary:"توکن نداری؟ اینجا بگیرش (۲ دقیقه)",
+  tokenSteps:[
+    "برو github.com و وارد حسابت شو.",
+    "بالا سمت راست روی عکس پروفایلت بزن، بعد Settings.",
+    "توی منوی سمت چپ برو تا ته صفحه و روی Developer settings بزن.",
+    "روی Personal access tokens بزن، بعد Fine-grained tokens، بعد Generate new token.",
+    "یه اسم دلخواه بذار و یه تاریخ انقضا انتخاب کن (مثلاً ۹۰ روز).",
+    "توی بخش Repository access گزینه‌ی Only select repositories رو بزن و همون ریپویی که می‌خوای بهش push کنی رو انتخاب کن.",
+    "توی Permissions → Repository permissions دنبال Contents بگرد و بذارش روی Read and write.",
+    "پایین صفحه Generate token رو بزن و فوراً توکن رو کپی کن — گیت‌هاب فقط یه‌بار نشونش می‌ده.",
+    "توکن رو توی فیلد بالا بچسبون و بعد دکمه‌ی «بررسی دسترسی» رو بزن تا مطمئن شی همه‌چی درسته.",
+  ],
+  tokenHelpWorkflow:"فایل‌هایی تو .github/workflows داری؟ توکن باید Workflows → Read and write (fine-grained) یا اسکوپ workflow (classic) هم داشته باشه، وگرنه گیت‌هاب ۴۰۳ یا ۴۰۴ می‌ده.",
+  tokenHelpOrg:"داری به ریپوی یه سازمان push می‌کنی؟ ممکنه صاحب سازمان باید توکن رو تأیید کنه تا کار کنه — گیت‌هاب در این حالت یه پیام pending approval نشون می‌ده.",
+  tokenHelpClassic:"می‌خوای classic token بسازی؟ Developer settings → Personal access tokens → Tokens (classic) → Generate new token (classic)، و اسکوپ repo رو تیک بزن.",
+  tokenHelpLink:"باز کردن تنظیمات توکن گیت‌هاب",
+  rememberLabel:"این توکن رو تا وقتی این تب رو نبستم نگه‌دار (هیچ‌وقت دائمی ذخیره نمی‌شه)",
+  ownerLabel:"صاحب ریپو", repoLabel:"نام ریپو", branchLabel:"شاخه (خالی = شاخه‌ی پیش‌فرض ریپو)", targetLabel:"زیرپوشه‌ی مقصد (اختیاری)",
+  msgLabel:"پیام کامیت", checkBtn:"اول دسترسی رو بررسی کن (چیزی تغییر نمی‌کنه)",
+  s2title:"چی می‌خوای push کنی", pickFolder:"انتخاب پوشه", pickZip:"انتخاب zip", pickFiles:"افزودن فایل",
+  heavyLabel:"شامل node_modules / venv / build هم بشه (پیش‌فرض خاموش)",
+  flattenLabel:"اگه همه‌چیز تو یه پوشه‌ی بیرونی بود، اون پوشه حذف بشه",
+  excludeHint:"همیشه نادیده گرفته می‌شن: .git، node_modules، venv، .venv، __pycache__، dist، build، .next، __MACOSX، .DS_Store، Thumbs.db، و فایل‌های .env (به‌جز .env.example) تا سهوی هیچ رمزی آپلود نشه.",
+  s3title:"Push", pushBtn:"Push به گیت‌هاب", cancelBtn:"لغو", copyLog:"کپی لاگ", copied:"کپی شد ✓",
+  footer:"همه‌چی توی مرورگر خودت اجرا می‌شه. هیچ سروری وسط نیست — هر درخواست مستقیم به api.github.com می‌ره. موقع push این تب رو باز نگه دار.",
+  show:"نمایش", hide:"مخفی",
+  noFiles:"هنوز فایلی انتخاب نشده.",
+  filesFound:(n,bytes,skipped)=>`${n} فایل انتخاب شد · ${humanSize(bytes)}` + (skipped ? ` · ${skipped} مورد نادیده گرفته شد` : ""),
+  destRoot:(d)=> d ? `اینا داخل «${d}/» تو ریپو می‌شینن:` : "اینا مستقیم تو ریشه‌ی ریپو می‌شینن:",
+  warnNoStructure:"این مرورگر ساختار پوشه‌ها رو نداد و فایل‌ها تخت شدن. برای حفظ پوشه‌ها از گزینه‌ی zip استفاده کن.",
+  warnZipSkipped:(n)=>`${n} مورد از زیپ رد شد (رمزدار، zip64 یا فشرده‌سازی پشتیبانی‌نشده).`,
+
+  errNoToken:"اول یه توکن وارد کن.", errBadToken:"توی توکن فاصله یا حرف غیرانگلیسی هست. دوباره از گیت‌هاب کپیش کن.",
+  errNoOwnerRepo:"صاحب ریپو و نام ریپو رو وارد کن.", errBadBranch:"اسم این شاخه معتبر نیست.",
+  errNoFiles:"اول یه پوشه یا فایل zip انتخاب کن.",
+  errZipUnsupported:"این مرورگر نمی‌تونه zip رو باز کنه. به‌جاش از انتخاب پوشه استفاده کن یا مرورگرت رو آپدیت کن.",
+  errZipBad:"این فایل zip معتبر نیست.", errZip64:"این zip خیلی بزرگه یا از نوع zip64 هست. دوباره معمولی zip کن یا از انتخاب پوشه استفاده کن.",
+  errTooLarge:(name,size)=>`فایل «${name}» رد شد: بزرگ‌تر از ${size} و API گیت‌هاب این‌جوری قبولش نمی‌کنه.`,
+  errEmptyFile:(name)=>`فایل خالی «${name}» رد شد (گیت‌هاب قبولش نکرد).`,
+  errArchived:"این ریپو آرشیو شده (فقط‌خواندنی). اول تو گیت‌هاب از آرشیو درش بیار.",
+  errNoPush:"حسابت ریپو رو می‌بینه ولی اجازه‌ی نوشتن روش نداره.",
+
+  logStart:"شروع شد…", logAuthCheck:"در حال بررسی توکن، ریپو و دسترسی نوشتن…",
+  logAccessOk:"دسترسی‌ها درسته.",
+  logRepoEmpty:"ریپو هنوز هیچ کامیتی نداره — اول یه فایل می‌سازیم تا فعال بشه…",
+  logRepoInit:"ریپو فعال شد.",
+  logBranchNew:(b,d)=>`شاخه‌ی «${b}» هنوز وجود نداره — از «${d}» ساخته می‌شه.`,
+  logPreparing:(n)=>`در حال آماده‌سازی ${n} فایل…`,
+  logProgress:(done,total)=>`${done} از ${total} فایل پردازش شد…`,
+  logPrepared:(t,b)=>`${t} فایل متنی مستقیم بسته شد، ${b} فایل باینری آپلود شد.`,
+  logWorkflow:(n)=>`${n} فایل تو .github/workflows هست — توکنت برای این‌ها باید دسترسی Workflows (یا اسکوپ workflow) داشته باشه.`,
+  logTree:"در حال ساخت tree…", logCommit:"در حال ساخت commit…", logRef:"در حال به‌روزرسانی شاخه…",
+  logNoChanges:"چیزی برای کامیت نیست — ریپو همین فایل‌ها رو دقیقاً داره.",
+  logDone:"تمام شد.", logCancelled:"لغو شد.",
+  logPushed:(n)=>`${n} فایل push شد.`,
+  logSkipped:(n)=>`${n} فایل نادیده گرفته شد (هشدارهای بالا رو ببین).`,
+  logRetry:(s)=>`محدودیت نرخ درخواست — ${s} ثانیه صبر می‌کنیم و دوباره تلاش می‌کنیم…`,
+  resultOk:"با موفقیت push شد.", resultLink:"دیدن روی گیت‌هاب ←",
+
+  chkUser:(login,kind)=>`✓ توکن کار می‌کنه — با حساب ${login} وارد شدی (${kind})`,
+  kindFine:"توکن fine-grained", kindUnknown:"توکن", kindClassic:(s)=>`توکن classic، اسکوپ‌ها: ${s || "هیچ"}`,
+  chkUserWarn:(s,m)=>`• خوندن /user ممکن نشد (${s}): ${m}`,
+  chkRepo:(full,priv,def)=>`✓ ریپو پیدا شد: ${full} (${priv?"خصوصی":"عمومی"})، شاخه‌ی پیش‌فرض: ${def}`,
+  chkBranch:(b,state)=> state==="exists" ? `✓ شاخه‌ی «${b}» وجود داره`
+        : state==="missing" ? `• شاخه‌ی «${b}» هنوز نیست — موقع push ساخته می‌شه`
+        : `• ریپو خالیه — اولین push فعالش می‌کنه`,
+  chkWriteOk:"✓ دسترسی نوشتن روی محتوای ریپو کار می‌کنه",
+  chkWriteSkip:"• تست نوشتن رد شد (ریپو خالیه)",
+  chkRate:(rem,lim,mins)=>`• سهمیه‌ی API: ${rem} از ${lim} درخواست مونده (حدود ${mins} دقیقه‌ی دیگه ریست می‌شه)`,
+  chkAllOk:"همه‌ی بررسی‌ها درسته. می‌تونی push کنی.", chkSomeFail:"موارد ✗ بالا رو درست کن و دوباره بررسی کن.",
+  chkFail:(what,s,m)=>`✗ ${what} (${s}): ${m}`,
+  whatUser:"بررسی توکن ناموفق بود", whatRepo:"ریپو باز نشد", whatBranch:"شاخه خونده نشد", whatWrite:"نوشتن مجاز نیست",
+
+  stageLabel:"جایی که خطا داد: ",
+  errGeneric:"یه مشکلی پیش اومد: ", errAuth:"این توکن رد شد (۴۰۱). مطمئن شو معتبره، منقضی نشده و کامل کپی شده.",
+  errForbidden:"دسترسی رد شد (۴۰۳).", errNotFound:"پیدا نشد (۴۰۴).",
+  errNetwork:"به api.github.com وصل نشد (خطای شبکه).",
+  hintPerm:"راه‌حل: توکن رو تو گیت‌هاب ویرایش کن. Repository access باید دقیقاً همین ریپو رو شامل بشه و Repository permissions → Contents باید روی Read and write باشه. اگه ریپو مال یه سازمانه، ممکنه صاحب سازمان باید توکن رو تأیید کنه.",
+  hintRate:"راه‌حل: به محدودیت نرخ گیت‌هاب خوردی. چند دقیقه صبر کن (اگه خیلی push کردی تا یک ساعت) و دوباره push کن.",
+  hintProtected:"راه‌حل: شاخه محافظت‌شده‌ست و push مستقیم قبول نمی‌کنه. اسم یه شاخه‌ی جدید بنویس و بعد pull request بساز.",
+  hintSso:"راه‌حل: سازمان SSO می‌خواد. تو گیت‌هاب توکن رو باز کن و Configure SSO → Authorize رو برای سازمان بزن.",
+  hintIp:"راه‌حل: سازمان لیست IP مجاز داره و شبکه‌ی فعلیت توش نیست. از یه شبکه‌ی مجاز استفاده کن یا از صاحب سازمان بپرس.",
+  hintWorkflow:"راه‌حل: این push به فایل‌های .github/workflows دست می‌زنه. به توکن Workflows → Read and write (fine-grained) یا اسکوپ workflow (classic) بده، یا اون فایل‌ها رو حذف کن.",
+  hintBlocked:"جواب از API گیت‌هاب نیومد (JSON نبود). احتمالاً VPN، پروکسی، فایروال یا فیلتر شبکه جلوی api.github.com رو گرفته. شبکه رو عوض کن یا VPN رو خاموش/روشن کن.",
+  hintRace:"راه‌حل: شاخه وسط کار عوض شد. دوباره push کن.",
+  hintNotFound:"املای صاحب ریپو و نام ریپو رو چک کن. توکن‌های fine-grained فقط ریپوهایی که انتخاب کردی رو می‌بینن و ریپوی خصوصی وقتی توکن بهش دسترسی نداره ۴۰۴ نشون می‌ده.",
+}
+};
+
+let lang = "en";
+function t(key){ const v = STR[lang][key]; return v !== undefined ? v : STR.en[key]; }
+function humanSize(n){
+  if(n < 1024) return n+" B";
+  if(n < 1024*1024) return (n/1024).toFixed(1)+" KB";
+  return (n/1024/1024).toFixed(1)+" MB";
+}
+
+/* =====================================================================
+   Constants
+   ===================================================================== */
+const ALWAYS_SKIP_DIRS = new Set([".git","__MACOSX"]);
+const HEAVY_DIRS = new Set(["node_modules","venv",".venv","__pycache__","dist","build",".next"]);
+const EXCLUDED_FILES = new Set([".DS_Store","Thumbs.db"]);
+const ENV_ALLOWED = new Set([".env.example",".env.sample",".env.template",".env.dist"]);
+const MAX_FILE_BYTES = 45 * 1024 * 1024;   // stay well under GitHub's blob ceiling
+const MAX_INLINE_TEXT = 2 * 1024 * 1024;   // text files up to this size ride inside the tree request
+const TREE_BATCH_BYTES = 3 * 1024 * 1024;  // each tree request stays far below GitHub's 7 MB limit
+const WRITE_GAP_MS = 900;                  // GitHub allows ~80 content-creating requests per minute
+const REQ_TIMEOUT_MS = 180000;
+
+/* =====================================================================
+   Element helpers / language
+   ===================================================================== */
+const el = id => document.getElementById(id);
+const tokenInput = el("token");
+let tokenVisible = false;
+
+function applyLang(){
+  document.documentElement.lang = lang;
+  document.documentElement.dir = lang === "fa" ? "rtl" : "ltr";
+  document.querySelectorAll("[data-i]").forEach(node=>{
+    const v = STR[lang][node.getAttribute("data-i")];
+    if (typeof v === "string") node.textContent = v;
+  });
+  el("lang-en").classList.toggle("active", lang==="en");
+  el("lang-fa").classList.toggle("active", lang==="fa");
+  el("toggleToken").textContent = tokenVisible ? t("hide") : t("show");
+  renderTokenSteps();
+  refreshFileSummary();
+  try{ localStorage.setItem("pocketpush.lang", lang); }catch(e){}
+}
+function renderTokenSteps(){
+  const list = el("tokenStepsList");
+  list.innerHTML = "";
+  (t("tokenSteps") || []).forEach(stepText=>{
+    const li = document.createElement("li");
+    li.textContent = stepText;
+    list.appendChild(li);
+  });
+}
+el("lang-en").addEventListener("click", ()=>{ lang="en"; applyLang(); });
+el("lang-fa").addEventListener("click", ()=>{ lang="fa"; applyLang(); });
+try{
+  const savedLang = localStorage.getItem("pocketpush.lang");
+  if (savedLang === "fa" || savedLang === "en") lang = savedLang;
+  else if ((navigator.language||"").toLowerCase().startsWith("fa")) lang = "fa";
+}catch(e){}
+
+/* ---------- token field ---------- */
+el("toggleToken").addEventListener("click", ()=>{
+  tokenVisible = !tokenVisible;
+  tokenInput.type = tokenVisible ? "text" : "password";
+  el("toggleToken").textContent = tokenVisible ? t("hide") : t("show");
+});
+el("rememberToken").addEventListener("change", (e)=>{
+  if(e.target.checked){ try{ sessionStorage.setItem("pocketpush.token", tokenInput.value); }catch(err){} }
+  else { try{ sessionStorage.removeItem("pocketpush.token"); }catch(err){} }
+});
+tokenInput.addEventListener("input", ()=>{
+  if(el("rememberToken").checked){ try{ sessionStorage.setItem("pocketpush.token", tokenInput.value); }catch(err){} }
+});
+try{
+  const savedToken = sessionStorage.getItem("pocketpush.token");
+  if(savedToken){ tokenInput.value = savedToken; el("rememberToken").checked = true; }
+}catch(e){}
+
+/* ---------- non-sensitive fields remembered across visits ---------- */
+["owner","repo","branch","targetFolder","commitMsg"].forEach(id=>{
+  try{
+    const saved = localStorage.getItem("pocketpush.field."+id);
+    if(saved !== null) el(id).value = saved;
+  }catch(e){}
+  el(id).addEventListener("input", ()=>{
+    try{ localStorage.setItem("pocketpush.field."+id, el(id).value); }catch(e){}
+    if(id === "targetFolder") refreshFileSummary();
+  });
+});
+
+/* =====================================================================
+   Paths
+   ===================================================================== */
+function normPath(p){
+  const parts = String(p).replace(/\\/g,"/").split("/").filter(s => s && s !== ".");
+  if(parts.some(s => s === "..")) return null;
+  return parts.join("/") || null;
+}
+function cleanTarget(v){
+  return String(v||"").trim().replace(/\\/g,"/").split("/").filter(s => s && s !== "." && s !== "..").join("/");
+}
+function joinPath(target, p){ return target ? (target + "/" + p) : p; }
+function encodePath(p){ return p.split("/").map(encodeURIComponent).join("/"); }
+function encodeRef(branch){ return branch.split("/").map(encodeURIComponent).join("/"); }
+function isEnvFile(name){
+  if(ENV_ALLOWED.has(name)) return false;
+  return name === ".env" || name.startsWith(".env.");
+}
+function hasAlwaysSkip(path){
+  const parts = path.split("/");
+  return parts.some(s => ALWAYS_SKIP_DIRS.has(s));
+}
+function pathAllowed(path, includeHeavy){
+  const parts = path.split("/");
+  const base = parts[parts.length-1];
+  if(EXCLUDED_FILES.has(base) || isEnvFile(base)) return false;
+  for(const seg of parts.slice(0,-1)){
+    if(!includeHeavy && HEAVY_DIRS.has(seg)) return false;
+  }
+  return true;
+}
+function stripFirstSegment(relPath){
+  // webkitRelativePath starts with the picked folder's own name; GitHub doesn't need that wrapper.
+  const norm = relPath.replace(/\\/g,"/");
+  const idx = norm.indexOf("/");
+  return idx === -1 ? norm : norm.slice(idx+1);
+}
+function stripCommonRoot(list){
+  if(!list.length) return list;
+  if(!list.every(f => f.path.includes("/"))) return list;
+  const roots = new Set(list.map(f => f.path.split("/")[0]));
+  if(roots.size !== 1) return list;
+  return list.map(f => Object.assign({}, f, { path: f.path.slice(f.path.indexOf("/")+1) }));
+}
+
+/* =====================================================================
+   File selection (lazy: bytes are read only while pushing)
+   ===================================================================== */
+let pickedRaw = [];       // [{path, size, read: async () => Uint8Array}]
+let selectedFiles = [];   // after filtering / flattening
+let skippedCount = 0;
+let pickWarnings = [];    // [() => string]
+
+el("pickFolder").addEventListener("click", ()=> el("folderInput").click());
+el("pickZip").addEventListener("click", ()=> el("zipInput").click());
+el("pickFiles").addEventListener("click", ()=> el("filesInput").click());
+el("includeHeavy").addEventListener("change", recompute);
+el("flattenRoot").addEventListener("change", recompute);
+
+function fileReader(f){ return async()=> new Uint8Array(await f.arrayBuffer()); }
+
+el("folderInput").addEventListener("change", (e)=>{
+  const files = Array.from(e.target.files || []);
+  const raw = [];
+  let flat = false;
+  for(const f of files){
+    const rel = f.webkitRelativePath;
+    if(!rel) flat = true;
+    const path = normPath(rel ? stripFirstSegment(rel) : f.name);
+    if(!path) continue;
+    raw.push({ path, size: f.size, read: fileReader(f) });
+  }
+  pickedRaw = raw;
+  pickWarnings = flat ? [()=>t("warnNoStructure")] : [];
+  try{ e.target.value = ""; }catch(err){}
+  recompute();
+});
+
+el("filesInput").addEventListener("change", (e)=>{
+  const files = Array.from(e.target.files || []);
+  for(const f of files){
+    const path = normPath(f.name);
+    if(!path) continue;
+    pickedRaw = pickedRaw.filter(x => x.path !== path);
+    pickedRaw.push({ path, size: f.size, read: fileReader(f) });
+  }
+  try{ e.target.value = ""; }catch(err){}
+  recompute();
+});
+
+el("zipInput").addEventListener("change", async (e)=>{
+  const file = e.target.files && e.target.files[0];
+  if(!file) return;
+  if(typeof DecompressionStream === "undefined"){ alert(t("errZipUnsupported")); return; }
+  try{
+    const buf = new Uint8Array(await file.arrayBuffer());
+    const entries = readZipEntries(buf);
+    const unsupported = entries.unsupported || 0;
+    pickedRaw = entries;
+    pickWarnings = unsupported ? [()=>t("warnZipSkipped")(unsupported)] : [];
+    recompute();
+  }catch(err){
+    alert(err.message || t("errZipBad"));
+  }
+  try{ e.target.value = ""; }catch(err){}
+});
+
+function recompute(){
+  const includeHeavy = el("includeHeavy").checked;
+  let list = pickedRaw.filter(f => !hasAlwaysSkip(f.path));
+  if(el("flattenRoot").checked) list = stripCommonRoot(list);
+  const kept = list.filter(f => pathAllowed(f.path, includeHeavy));
+  skippedCount = pickedRaw.length - kept.length;
+  selectedFiles = kept;
+  refreshFileSummary();
+}
+
+function refreshFileSummary(){
+  const box = el("fileSummary");
+  box.innerHTML = "";
+  const add = (text, cls)=>{
+    const d = document.createElement("div");
+    if(cls) d.className = cls;
+    d.textContent = text;
+    d.dir = "auto";
+    box.appendChild(d);
+  };
+  if(selectedFiles.length === 0){
+    add(t("noFiles"));
+    pickWarnings.forEach(w => add(w(), "w"));
+    return;
+  }
+  const bytes = selectedFiles.reduce((s,f)=>s+f.size,0);
+  add(t("filesFound")(selectedFiles.length, bytes, skippedCount));
+  const target = cleanTarget(el("targetFolder").value);
+  add(t("destRoot")(target));
+  const roots = [];
+  for(const f of selectedFiles){
+    const r = f.path.split("/")[0] + (f.path.includes("/") ? "/" : "");
+    if(!roots.includes(r)) roots.push(r);
+    if(roots.length >= 8) break;
+  }
+  add(roots.join("   "));
+  pickWarnings.forEach(w => add(w(), "w"));
+}
+
+/* ---------- minimal zip reader (stored + deflate, via native DecompressionStream) ---------- */
+function readZipEntries(buf){
+  const dv = new DataView(buf.buffer, buf.byteOffset, buf.byteLength);
+  let eocd = -1;
+  for(let i = buf.length - 22; i >= Math.max(0, buf.length - 22 - 65535); i--){
+    if(dv.getUint32(i, true) === 0x06054b50){ eocd = i; break; }
+  }
+  if(eocd === -1) throw new Error(t("errZipBad"));
+  const count = dv.getUint16(eocd+10, true);
+  let cd = dv.getUint32(eocd+16, true);
+  if(count === 0xFFFF || cd === 0xFFFFFFFF) throw new Error(t("errZip64"));
+  const out = [];
+  let unsupported = 0;
+  for(let i = 0; i < count; i++){
+    if(cd + 46 > buf.length || dv.getUint32(cd, true) !== 0x02014b50) break;
+    const flags = dv.getUint16(cd+8, true);
+    const method = dv.getUint16(cd+10, true);
+    const compSize = dv.getUint32(cd+20, true);
+    const size = dv.getUint32(cd+24, true);
+    const nameLen = dv.getUint16(cd+28, true);
+    const extraLen = dv.getUint16(cd+30, true);
+    const commentLen = dv.getUint16(cd+32, true);
+    const localOffset = dv.getUint32(cd+42, true);
+    const name = new TextDecoder("utf-8").decode(buf.subarray(cd+46, cd+46+nameLen));
+    cd += 46 + nameLen + extraLen + commentLen;
+    if(name.endsWith("/")) continue;
+    const path = normPath(name);
+    if(!path) continue;
+    if((flags & 1) || compSize === 0xFFFFFFFF || size === 0xFFFFFFFF || localOffset === 0xFFFFFFFF || (method !== 0 && method !== 8)){
+      unsupported++; continue;
+    }
+    out.push({
+      path, size,
+      read: async()=>{
+        if(dv.getUint32(localOffset, true) !== 0x04034b50) throw new Error(t("errZipBad"));
+        const lNameLen = dv.getUint16(localOffset+26, true);
+        const lExtraLen = dv.getUint16(localOffset+28, true);
+        const start = localOffset + 30 + lNameLen + lExtraLen;
+        const comp = buf.subarray(start, start + compSize);
+        return method === 0 ? comp.slice() : await inflateRaw(comp);
+      }
+    });
+  }
+  out.unsupported = unsupported;
+  return out;
+}
+async function inflateRaw(bytes){
+  const ds = new DecompressionStream("deflate-raw");
+  const stream = new Blob([bytes]).stream().pipeThrough(ds);
+  const buf = await new Response(stream).arrayBuffer();
+  return new Uint8Array(buf);
+}
+
+/* =====================================================================
+   Logging / progress
+   ===================================================================== */
+function mkLogger(box){
+  return function(msg, cls){
+    const line = document.createElement("div");
+    if(cls) line.className = "l-"+cls;
+    line.dir = "auto";
+    line.textContent = msg;
+    box.appendChild(line);
+    box.scrollTop = box.scrollHeight;
+  };
+}
+const logBox = el("log"), checkBox = el("checkLog");
+const log = mkLogger(logBox), clog = mkLogger(checkBox);
+function clearLog(){ logBox.innerHTML = ""; el("result").innerHTML = ""; }
+function setProgress(pct){ el("progressFill").style.width = Math.max(0,Math.min(100,pct))+"%"; }
+
+el("copyLog").addEventListener("click", async ()=>{
+  const lines = ["PocketPush v"+VERSION+" | "+navigator.userAgent];
+  [checkBox, logBox].forEach(b => { Array.from(b.children).forEach(c => lines.push(c.textContent)); lines.push(""); });
+  const text = lines.join("\n").trim();
+  let ok = false;
+  try{ await navigator.clipboard.writeText(text); ok = true; }catch(e){}
+  if(!ok){
+    try{
+      const ta = document.createElement("textarea");
+      ta.value = text; ta.style.position = "fixed"; ta.style.opacity = "0";
+      document.body.appendChild(ta); ta.select(); document.execCommand("copy"); ta.remove(); ok = true;
+    }catch(e){}
+  }
+  const btn = el("copyLog");
+  const old = btn.textContent;
+  btn.textContent = ok ? t("copied") : "✗";
+  setTimeout(()=>{ btn.textContent = old; }, 1500);
+});
+
+/* =====================================================================
+   GitHub API wrapper: timeouts, throttled writes, retry/backoff
+   ===================================================================== */
+let controller = null;
+let lastWrite = 0;
+
+function abortError(){ const e = new Error("aborted"); e.name = "AbortError"; return e; }
+function throwIfAborted(){ if(controller && controller.signal.aborted) throw abortError(); }
+function sleep(ms){
+  return new Promise((resolve, reject)=>{
+    const id = setTimeout(resolve, ms);
+    if(controller){
+      controller.signal.addEventListener("abort", ()=>{ clearTimeout(id); reject(abortError()); }, {once:true});
+    }
+  });
+}
+async function throttleWrite(){
+  const wait = lastWrite + WRITE_GAP_MS - Date.now();
+  if(wait > 0) await sleep(wait);
+  lastWrite = Date.now();
+}
+function pickHeaders(res){
+  const g = k => { try{ return res.headers.get(k); }catch(e){ return null; } };
+  return {
+    remaining: g("x-ratelimit-remaining"), reset: g("x-ratelimit-reset"), retryAfter: g("retry-after"),
+    sso: g("x-github-sso"), scopes: g("x-oauth-scopes"), requestId: g("x-github-request-id"),
+  };
+}
+
+// Raw request with retries. Returns the final Response (never throws for HTTP errors).
+async function gh(path, opts){
+  opts = opts || {};
+  const method = (opts.method || "GET").toUpperCase();
+  const isWrite = method !== "GET";
+  const headers = Object.assign({
+    "Authorization": "Bearer " + tokenInput.value.trim(),
+    "Accept": "application/vnd.github+json",
+    "X-GitHub-Api-Version": API_VERSION,
+  }, isWrite ? {"Content-Type":"application/json"} : {}, opts.headers || {});
+  let attempt = 0;
+  while(true){
+    attempt++;
+    throwIfAborted();
+    if(isWrite) await throttleWrite();
+    let res;
+    const ac = new AbortController();
+    const onAbort = ()=> ac.abort();
+    if(controller) controller.signal.addEventListener("abort", onAbort, {once:true});
+    const timer = setTimeout(()=> ac.abort(), REQ_TIMEOUT_MS);
+    try{
+      res = await fetch(API + path, Object.assign({}, opts, { method, headers, signal: ac.signal }));
+    }catch(err){
+      if(controller && controller.signal.aborted) throw abortError();
+      if(attempt <= 4){ await sleep(1500*attempt); continue; }
+      const ne = new Error(err && err.message ? err.message : "network error");
+      ne.isNetwork = true;
+      throw ne;
+    }finally{
+      clearTimeout(timer);
+      if(controller) controller.signal.removeEventListener("abort", onAbort);
+    }
+    if(res.status === 403 || res.status === 429){
+      const h = pickHeaders(res);
+      let bodyMsg = "";
+      try{ bodyMsg = ((JSON.parse(await res.clone().text())).message || ""); }catch(e){}
+      // 403 can mean "rate limited" or "genuinely not allowed" — only wait for the former.
+      const limited = res.status === 429 || h.remaining === "0" || !!h.retryAfter || /rate limit|abuse/i.test(bodyMsg);
+      if(limited && attempt <= 8){
+        let wait;
+        if(h.retryAfter){ wait = parseInt(h.retryAfter,10) || 60; }
+        else if(h.remaining === "0"){
+          const reset = parseInt(h.reset || "0", 10);
+          wait = reset ? Math.max(5, reset - Math.floor(Date.now()/1000) + 1) : 60;
+        } else { wait = 60; } // secondary limit with no hint: GitHub asks for at least a minute
+        if(wait > 180) return res; // too long to sit and wait — surface the error instead
+        log(t("logRetry")(wait), "warn");
+        await sleep(wait*1000);
+        continue;
+      }
+    }
+    if(res.status >= 500 && attempt <= 4){ await sleep(1500*attempt); continue; }
+    return res;
+  }
+}
+
+// Request + parsed result, never throws on HTTP status.
+async function ghRes(path, opts){
+  const res = await gh(path, opts);
+  let text = "";
+  try{ text = await res.text(); }catch(e){}
+  let body = null;
+  try{ body = JSON.parse(text); }catch(e){}
+  const message = (body && body.message) || (text ? text.replace(/\s+/g," ").trim().slice(0,200) : "") || res.statusText || ("HTTP "+res.status);
+  return { res, status: res.status, ok: res.ok, body, text, message, hdr: pickHeaders(res),
+           method: ((opts && opts.method) || "GET").toUpperCase(), path };
+}
+function mkErr(r){
+  const e = new Error(r.message);
+  e.status = r.status; e.method = r.method; e.path = r.path; e.hdr = r.hdr;
+  e.docs = r.body && r.body.documentation_url; e.jsonBody = !!r.body;
+  return e;
+}
+async function ghJson(path, opts){
+  const r = await ghRes(path, opts);
+  if(!r.ok) throw mkErr(r);
+  return r.body;
+}
+
+/* ---------- error explanation ---------- */
+function hintKeyFor(e){
+  const m = e.message || "", s = e.status, h = e.hdr || {};
+  if(s === 401) return null;
+  if(/workflow/i.test(m)) return "hintWorkflow";
+  if(/ip allow list/i.test(m)) return "hintIp";
+  if(/saml|sso/i.test(m) || h.sso) return "hintSso";
+  if(/secondary|rate limit|abuse/i.test(m) || h.retryAfter || h.remaining === "0") return "hintRate";
+  if(/protected branch|GH006|status check|pull request/i.test(m)) return "hintProtected";
+  if(/fast.?forward|already exists/i.test(m)) return "hintRace";
+  if(s === 403 && !e.jsonBody) return "hintBlocked";
+  if(/not accessible|permission/i.test(m)) return "hintPerm";
+  if(s === 403) return "hintPerm";
+  if(s === 404) return "hintNotFound";
+  return null;
+}
+function describeErr(e){
+  const out = [];
+  if(e.status) out.push(`HTTP ${e.status} ${e.method||""} ${e.path||""}`.replace(/\s+/g," ").trim());
+  if(e.message) out.push(e.message);
+  if(e.docs) out.push(e.docs);
+  const h = e.hdr || {};
+  const bits = [];
+  if(h.remaining !== null && h.remaining !== undefined) bits.push("rate-remaining="+h.remaining);
+  if(h.retryAfter) bits.push("retry-after="+h.retryAfter);
+  if(h.requestId) bits.push("request-id="+h.requestId);
+  if(bits.length) out.push(bits.join("  "));
+  return out;
+}
+function reportError(L, e, stage){
+  if(e.isNetwork){
+    L(t("errNetwork"), "err");
+    if(e.message) L(e.message, "err");
+    L(t("hintBlocked"), "warn");
+  } else {
+    if(e.status === 401) L(t("errAuth"), "err");
+    else if(e.status === 403 || e.status === 429) L(t("errForbidden"), "err");
+    else if(e.status === 404) L(t("errNotFound"), "err");
+    else if(!e.status) { L(t("errGeneric") + (e.message||""), "err"); }
+    if(e.status) describeErr(e).forEach(line => L(line, "err"));
+    const k = hintKeyFor(e);
+    if(k) L(t(k), "warn");
+  }
+  if(stage) L(t("stageLabel") + stage, "warn");
+}
+
+/* =====================================================================
+   Access inspection (used by "Check access" and as the push preflight)
+   ===================================================================== */
+async function inspectAccess(L, o, mode){
+  const verbose = mode === "check";
+  const out = { ok:true, repoInfo:null, branch:null, branchState:"unknown", refSha:null };
+  const failWith = (what, r)=>{
+    out.ok = false;
+    L(t("chkFail")(what, r.status, r.message), "err");
+    const k = hintKeyFor(mkErr(r));
+    if(k) L(t(k), "warn");
+  };
+
+  // 1) token
+  const u = await ghRes("/user");
+  if(u.status === 200){
+    if(verbose){
+      const scopes = u.hdr.scopes;
+      const kind = scopes !== null && scopes !== undefined ? t("kindClassic")(scopes)
+                 : (o.token.indexOf("github_pat_") === 0 ? t("kindFine") : t("kindUnknown"));
+      L(t("chkUser")(u.body.login, kind), "ok");
+    }
+  } else if(u.status === 401){
+    failWith(t("whatUser"), u); L(t("errAuth"), "err");
+    return out;
+  } else if(verbose){
+    L(t("chkUserWarn")(u.status, u.message), "warn");
+  }
+
+  // 2) repository
+  const r = await ghRes(`/repos/${o.owner}/${o.repo}`);
+  if(r.status !== 200){ failWith(t("whatRepo"), r); return out; }
+  const repoInfo = r.body;
+  out.repoInfo = repoInfo;
+  if(verbose) L(t("chkRepo")(repoInfo.full_name || (o.owner+"/"+o.repo), !!repoInfo.private, repoInfo.default_branch), "ok");
+  if(repoInfo.archived){ out.ok = false; L("✗ " + t("errArchived"), "err"); return out; }
+  if(repoInfo.permissions && repoInfo.permissions.push === false && repoInfo.permissions.admin !== true){
+    out.ok = false; L("✗ " + t("errNoPush"), "err"); return out;
+  }
+
+  // 3) branch
+  const br = o.branch || repoInfo.default_branch || "main";
+  out.branch = br;
+  const ref = await ghRes(`/repos/${o.owner}/${o.repo}/git/ref/heads/${encodeRef(br)}`);
+  if(ref.status === 200){
+    out.branchState = "exists"; out.refSha = ref.body.object.sha;
+  } else if(ref.status === 409){
+    out.branchState = "empty";
+  } else if(ref.status === 404){
+    // missing branch in a non-empty repo, or an empty repo? ask the commits endpoint (409 = empty)
+    const c = await ghRes(`/repos/${o.owner}/${o.repo}/commits?per_page=1`);
+    out.branchState = (c.status === 409) ? "empty" : "missing";
+  } else {
+    failWith(t("whatBranch"), ref); return out;
+  }
+  if(verbose) L(t("chkBranch")(br, out.branchState), out.branchState === "exists" ? "ok" : null);
+
+  // 4) write probe: creating a dangling blob needs Contents:write and changes nothing visible
+  if(out.branchState === "empty"){
+    if(verbose) L(t("chkWriteSkip"));
+  } else {
+    const w = await ghRes(`/repos/${o.owner}/${o.repo}/git/blobs`, {
+      method:"POST", body: JSON.stringify({ content:"pocketpush access check", encoding:"utf-8" }),
+    });
+    if(w.status === 201){
+      if(verbose) L(t("chkWriteOk"), "ok");
+    } else if(w.status === 409){
+      out.branchState = "empty";
+      if(verbose) L(t("chkWriteSkip"));
+    } else {
+      failWith(t("whatWrite"), w); return out;
+    }
+  }
+
+  // 5) quota (does not count against the limit)
+  if(verbose){
+    const q = await ghRes("/rate_limit");
+    if(q.status === 200 && q.body && q.body.resources && q.body.resources.core){
+      const core = q.body.resources.core;
+      const mins = Math.max(0, Math.ceil((core.reset*1000 - Date.now())/60000));
+      L(t("chkRate")(core.remaining, core.limit, mins));
+    }
+  }
+  return out;
+}
+
+/* =====================================================================
+   Form reading
+   ===================================================================== */
+function readForm(){
+  const token = tokenInput.value.trim();
+  let owner = el("owner").value.trim();
+  let repo = el("repo").value.trim();
+  // be forgiving: allow a pasted GitHub URL or "owner/repo"
+  const urlM = (owner+" "+repo).match(/github\.com[\/:]([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+)/i);
+  if(urlM){ owner = urlM[1]; repo = urlM[2]; }
+  else if(!repo && owner.indexOf("/") !== -1){ const p = owner.split("/"); owner = p[0]; repo = p[1] || ""; }
+  repo = repo.replace(/\.git$/i, "");
+  el("owner").value = owner; el("repo").value = repo;
+  const branch = el("branch").value.trim();
+  const target = cleanTarget(el("targetFolder").value);
+  const message = el("commitMsg").value.trim() || "Upload project folder";
+
+  if(!token){ alert(t("errNoToken")); return null; }
+  if(!/^[\x21-\x7E]+$/.test(token)){ alert(t("errBadToken")); return null; }
+  if(!/^[A-Za-z0-9_.-]+$/.test(owner) || !/^[A-Za-z0-9_.-]+$/.test(repo)){ alert(t("errNoOwnerRepo")); return null; }
+  if(branch && (/[\s~^:?*\[\\]|\.\.|^\/|\/$|\/\/|\.lock$|@\{/.test(branch))){ alert(t("errBadBranch")); return null; }
+  return { token, owner, repo, branch, target, message };
+}
+
+/* =====================================================================
+   Busy state / wake lock
+   ===================================================================== */
+let wakeLock = null;
+async function setBusy(b){
+  el("pushBtn").disabled = b;
+  el("checkBtn").disabled = b;
+  el("cancelBtn").style.display = b ? "block" : "none";
+  window.onbeforeunload = b ? (e)=>{ e.preventDefault(); e.returnValue = ""; return ""; } : null;
+  if(b){
+    try{ if(navigator.wakeLock) wakeLock = await navigator.wakeLock.request("screen"); }catch(e){}
+  } else {
+    try{ if(wakeLock) await wakeLock.release(); }catch(e){}
+    wakeLock = null;
+  }
+}
+el("cancelBtn").addEventListener("click", ()=>{ if(controller) controller.abort(); });
+
+/* =====================================================================
+   Check access
+   ===================================================================== */
+el("checkBtn").addEventListener("click", runCheck);
+async function runCheck(){
+  checkBox.innerHTML = "";
+  const form = readForm();
+  if(!form) return;
+  controller = new AbortController();
+  await setBusy(true);
+  try{
+    const info = await inspectAccess(clog, form, "check");
+    clog(info.ok ? t("chkAllOk") : t("chkSomeFail"), info.ok ? "ok" : "err");
+  }catch(err){
+    if(err.name === "AbortError") clog(t("logCancelled"), "warn");
+    else reportError(clog, err, "");
+  }finally{
+    await setBusy(false);
+    controller = null;
+  }
+}
+
+/* =====================================================================
+   Push
+   ===================================================================== */
+el("pushBtn").addEventListener("click", runPush);
+
+async function runPush(){
+  clearLog(); setProgress(0);
+  const form = readForm();
+  if(!form) return;
+  if(selectedFiles.length === 0){ alert(t("errNoFiles")); return; }
+  const { owner, repo, target, message } = form;
+
+  controller = new AbortController();
+  await setBusy(true);
+  let stage = "";
+  const skipped = [];
+
+  try{
+    log(t("logStart"));
+    stage = t("logAuthCheck");
+    log(stage);
+    const info = await inspectAccess(log, form, "push");
+    if(!info.ok) return;
+    log(t("logAccessOk"), "ok");
+    const branch = info.branch;
+    const repoInfo = info.repoInfo;
+
+    // unique paths, size limit
+    const byPath = new Map();
+    selectedFiles.forEach(f => byPath.set(f.path, f));
+    let files = Array.from(byPath.values()).filter(f=>{
+      if(f.size > MAX_FILE_BYTES){ log(t("errTooLarge")(f.path, humanSize(MAX_FILE_BYTES)), "warn"); skipped.push(f.path); return false; }
+      return true;
+    });
+    if(files.length === 0){ log(t("errNoFiles"), "err"); return; }
+
+    const wfCount = files.filter(f => /(^|\/)\.github\/workflows\//.test(joinPath(target, f.path))).length;
+    if(wfCount) log(t("logWorkflow")(wfCount), "warn");
+
+    // decide parent commit / branch state
+    let parentCommitSha = null, branchExists = false, bootstrapped = false;
+    if(info.branchState === "exists"){
+      parentCommitSha = info.refSha; branchExists = true;
+    } else if(info.branchState === "missing"){
+      log(t("logBranchNew")(branch, repoInfo.default_branch), "warn");
+      stage = "git/ref (default branch)";
+      const dref = await ghJson(`/repos/${owner}/${repo}/git/ref/heads/${encodeRef(repoInfo.default_branch)}`);
+      parentCommitSha = dref.object.sha;
+    } else if(info.branchState === "empty"){
+      log(t("logRepoEmpty"));
+      stage = "contents (init)";
+      const first = files.shift();
+      const firstBytes = await first.read();
+      await ghJson(`/repos/${owner}/${repo}/contents/${encodePath(joinPath(target, first.path))}`, {
+        method:"PUT",
+        body: JSON.stringify({ message, content: toBase64(firstBytes), branch }),
+      });
+      log(t("logRepoInit"), "ok");
+      bootstrapped = true; branchExists = true;
+      stage = "git/ref";
+      for(let i=0; i<5 && !parentCommitSha; i++){
+        const rr = await ghRes(`/repos/${owner}/${repo}/git/ref/heads/${encodeRef(branch)}`);
+        if(rr.status === 200) parentCommitSha = rr.body.object.sha;
+        else await sleep(1000);
+      }
+      if(!parentCommitSha) throw mkErr(await ghRes(`/repos/${owner}/${repo}/git/ref/heads/${encodeRef(branch)}`));
+    }
+
+    let baseTreeSha = null;
+    if(parentCommitSha){
+      stage = "git/commits";
+      const parentCommit = await ghJson(`/repos/${owner}/${repo}/git/commits/${parentCommitSha}`);
+      baseTreeSha = parentCommit.tree.sha;
+    }
+
+    let pushedCount = bootstrapped ? 1 : 0;
+    let resultUrl = `https://github.com/${owner}/${repo}`;
+
+    if(files.length === 0){
+      setProgress(100);
+    } else {
+      // read + classify files one by one: text rides inline in the tree, binaries become blobs
+      log(t("logPreparing")(files.length));
+      const decoder = new TextDecoder("utf-8", { fatal:true, ignoreBOM:true });
+      const entries = [];
+      let done = 0, nText = 0, nBin = 0;
+      for(const f of files){
+        throwIfAborted();
+        stage = "read: " + f.path;
+        const bytes = await f.read();
+        const full = joinPath(target, f.path);
+        let text = null;
+        if(bytes.length > 0 && bytes.length <= MAX_INLINE_TEXT){
+          try{
+            const decoded = decoder.decode(bytes);
+            if(decoded.indexOf("\u0000") === -1) text = decoded;
+          }catch(e){ /* not valid UTF-8 → binary */ }
+        }
+        if(text !== null){
+          entries.push({ path: full, mode:"100644", type:"blob", content: text, _size: JSON.stringify(text).length });
+          nText++;
+        } else {
+          stage = "git/blobs";
+          try{
+            const blob = await ghJson(`/repos/${owner}/${repo}/git/blobs`, {
+              method:"POST", body: JSON.stringify({ content: toBase64(bytes), encoding:"base64" }),
+            });
+            entries.push({ path: full, mode:"100644", type:"blob", sha: blob.sha, _size: 200 });
+            nBin++;
+          }catch(e){
+            if(bytes.length === 0 && e.status === 422){ log(t("errEmptyFile")(f.path), "warn"); skipped.push(f.path); }
+            else throw e;
+          }
+        }
+        done++;
+        setProgress(5 + (done/files.length)*80);
+        if(done % 50 === 0 || done === files.length) log(t("logProgress")(done, files.length));
+      }
+      log(t("logPrepared")(nText, nBin));
+
+      if(entries.length === 0){
+        if(!bootstrapped){ log(t("errNoFiles"), "err"); return; }
+        setProgress(100);
+      } else {
+        stage = "git/trees";
+        log(t("logTree"));
+        let curTree = baseTreeSha, batch = [], batchBytes = 0, sent = 0;
+        const flush = async ()=>{
+          if(!batch.length) return;
+          const body = { tree: batch.map(({_size, ...rest}) => rest) };
+          if(curTree) body.base_tree = curTree;
+          const made = await ghJson(`/repos/${owner}/${repo}/git/trees`, { method:"POST", body: JSON.stringify(body) });
+          curTree = made.sha;
+          sent += batch.length;
+          setProgress(85 + (sent/entries.length)*8);
+          batch = []; batchBytes = 0;
+        };
+        for(const e of entries){
+          if(batch.length && (batchBytes + e._size > TREE_BATCH_BYTES || batch.length >= 2000)) await flush();
+          batch.push(e); batchBytes += e._size;
+        }
+        await flush();
+
+        if(baseTreeSha && curTree === baseTreeSha){
+          log(t("logNoChanges"), "warn");
+          setProgress(100);
+        } else {
+          stage = "git/commits";
+          log(t("logCommit"));
+          const commitBody = { message, tree: curTree };
+          if(parentCommitSha) commitBody.parents = [parentCommitSha];
+          const commit = await ghJson(`/repos/${owner}/${repo}/git/commits`, { method:"POST", body: JSON.stringify(commitBody) });
+
+          stage = "git/refs";
+          log(t("logRef"));
+          if(branchExists){
+            await ghJson(`/repos/${owner}/${repo}/git/refs/heads/${encodeRef(branch)}`, {
+              method:"PATCH", body: JSON.stringify({ sha: commit.sha, force:false }),
+            });
+          } else {
+            await ghJson(`/repos/${owner}/${repo}/git/refs`, {
+              method:"POST", body: JSON.stringify({ ref: `refs/heads/${branch}`, sha: commit.sha }),
+            });
+          }
+          pushedCount += entries.length;
+          resultUrl = `https://github.com/${owner}/${repo}/commit/${commit.sha}`;
+          setProgress(100);
+        }
+      }
+    }
+
+    log(t("logDone"), "ok");
+    if(pushedCount) log(t("logPushed")(pushedCount), "ok");
+    if(skipped.length) log(t("logSkipped")(skipped.length), "warn");
+    const box = el("result");
+    box.textContent = t("resultOk") + " ";
+    const a = document.createElement("a");
+    a.href = resultUrl; a.target = "_blank"; a.rel = "noopener"; a.textContent = t("resultLink");
+    box.appendChild(a);
+  }catch(err){
+    if(err.name === "AbortError") log(t("logCancelled"), "warn");
+    else reportError(log, err, stage);
+  }finally{
+    await setBusy(false);
+    controller = null;
+  }
+}
+
+function toBase64(bytes){
+  let binary = "";
+  const chunk = 0x8000;
+  for(let i=0;i<bytes.length;i+=chunk){
+    binary += String.fromCharCode.apply(null, bytes.subarray(i, i+chunk));
+  }
+  return btoa(binary);
+}
+
+applyLang();
+})();
+</script>
+</body>
+</html>
